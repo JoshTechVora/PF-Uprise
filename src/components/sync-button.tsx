@@ -10,7 +10,10 @@ export function SyncButton() {
   async function handleSync() {
     setLoading(true);
     try {
-      await fetch("/api/plaid/sync", { method: "POST" });
+      await Promise.all([
+        fetch("/api/plaid/sync", { method: "POST" }),
+        fetch("/api/flinks/sync", { method: "POST" }),
+      ]);
       router.refresh();
     } finally {
       setLoading(false);

@@ -30,6 +30,8 @@ A personal finance tracker built with Next.js, Supabase, and Plaid.
      tokens). Never expose this key to the browser.
    - `PLAID_CLIENT_ID` / `PLAID_SECRET` / `PLAID_ENV` — Plaid dashboard keys.
      `PLAID_ENV` is `sandbox`, `development`, or `production`.
+   - `ANTHROPIC_API_KEY` — console.anthropic.com API key, used by `/api/chat`
+     to power the transaction chat assistant.
 
 4. Install dependencies and run the dev server:
 

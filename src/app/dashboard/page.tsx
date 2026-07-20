@@ -1,6 +1,7 @@
 import { ConnectBankButton } from "@/components/connect-bank-button";
-import { SignOutButton } from "@/components/sign-out-button";
+import { ConnectWealthsimpleButton } from "@/components/connect-wealthsimple-button";
 import { SyncButton } from "@/components/sync-button";
+import { TransactionRangeFilter } from "@/components/transaction-range-filter";
 import { createClient } from "@/lib/supabase/server";
 
 function formatCurrency(amount: number | null, currencyCode: string | null) {
@@ -11,11 +12,27 @@ function formatCurrency(amount: number | null, currencyCode: string | null) {
   }).format(amount);
 }
 
-export default async function DashboardPage() {
+function balanceColorClass(accountType: string | null) {
+  if (accountType === "credit" || accountType === "loan") {
+    return "text-red-600 dark:text-red-500";
+  }
+  if (accountType === "investment") {
+    return "text-emerald-600 dark:text-emerald-500";
+  }
+  return "text-zinc-900 dark:text-zinc-50";
+}
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ range?: string }>;
+}) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const range = (await searchParams).range === "7d" ? "7d" : "30d";
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - (range === "7d" ? 7 : 30));
+  const cutoffDate = cutoff.toISOString().slice(0, 10);
 
   const { data: accounts } = await supabase
     .from("accounts")
@@ -25,36 +42,36 @@ export default async function DashboardPage() {
   const { data: transactions } = await supabase
     .from("transactions")
     .select("*, accounts(name)")
-    .order("date", { ascending: false })
-    .limit(25);
+    .gte("date", cutoffDate)
+    .order("date", { ascending: false });
 
-  const totalBalance = (accounts ?? []).reduce(
-    (sum, account) => sum + (account.current_balance ?? 0),
-    0,
-  );
+  const totalOwed = (accounts ?? [])
+    .filter((account) => account.type === "credit" || account.type === "loan")
+    .reduce((sum, account) => sum + (account.current_balance ?? 0), 0);
+
+  const totalHave = (accounts ?? [])
+    .filter((account) => account.type !== "credit" && account.type !== "loan")
+    .reduce((sum, account) => sum + (account.current_balance ?? 0), 0);
 
   return (
-    <div className="flex-1 bg-zinc-50 dark:bg-black">
-      <div className="mx-auto max-w-4xl px-6 py-10">
-        <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-              PF Uprise
-            </h1>
+    <>
+        <section className="grid grid-cols-2 gap-4">
+          <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
             <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              {user?.email}
+              Money I have
+            </p>
+            <p className="mt-1 text-3xl font-semibold text-emerald-600 dark:text-emerald-500">
+              {formatCurrency(totalHave, "USD")}
             </p>
           </div>
-          <SignOutButton />
-        </header>
-
-        <section className="mt-8 rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Total balance
-          </p>
-          <p className="mt-1 text-3xl font-semibold text-zinc-900 dark:text-zinc-50">
-            {formatCurrency(totalBalance, "USD")}
-          </p>
+          <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Money I owe
+            </p>
+            <p className="mt-1 text-3xl font-semibold text-red-600 dark:text-red-500">
+              {formatCurrency(totalOwed, "USD")}
+            </p>
+          </div>
         </section>
 
         <section className="mt-8">
@@ -65,6 +82,7 @@ export default async function DashboardPage() {
             <div className="flex items-center gap-3">
               {(accounts ?? []).length > 0 && <SyncButton />}
               <ConnectBankButton />
+              <ConnectWealthsimpleButton />
             </div>
           </div>
 
@@ -88,7 +106,9 @@ export default async function DashboardPage() {
                       {account.subtype ?? account.type}
                     </p>
                   </div>
-                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+                  <p
+                    className={`text-sm font-medium ${balanceColorClass(account.type)}`}
+                  >
                     {formatCurrency(
                       account.current_balance,
                       account.iso_currency_code,
@@ -101,13 +121,16 @@ export default async function DashboardPage() {
         </section>
 
         <section className="mt-8">
-          <h2 className="text-lg font-medium text-zinc-900 dark:text-zinc-50">
-            Recent transactions
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-medium text-zinc-900 dark:text-zinc-50">
+              Recent transactions
+            </h2>
+            <TransactionRangeFilter selected={range} />
+          </div>
 
           {(transactions ?? []).length === 0 ? (
             <p className="mt-4 rounded-lg border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-              No transactions yet.
+              No transactions in this range.
             </p>
           ) : (
             <ul className="mt-4 divide-y divide-zinc-200 rounded-lg border border-zinc-200 bg-white dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-950">
@@ -142,7 +165,6 @@ export default async function DashboardPage() {
             </ul>
           )}
         </section>
-      </div>
-    </div>
+    </>
   );
 }
