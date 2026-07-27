@@ -13,8 +13,10 @@ const NAV_SECTIONS = [
     items: [
       { href: "/dashboard/mortgage", label: "Mortgage" },
       { href: "/dashboard/energy", label: "Energy" },
-      { href: "/dashboard/groceries", label: "Groceries & Food" },
+      { href: "/dashboard/groceries", label: "Groceries" },
+      { href: "/dashboard/food", label: "Food" },
       { href: "/dashboard/car", label: "Car" },
+      { href: "/dashboard/fitness", label: "Fitness" },
     ],
   },
   {

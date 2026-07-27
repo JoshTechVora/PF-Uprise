@@ -17,20 +17,28 @@ function mapFlinksCategoryToType(category: string | null): string {
 }
 
 /**
- * Pulls current accounts and recent transactions for a single Flinks login
- * (e.g. Wealthsimple) and upserts them into Supabase, scoped to the owning
- * user. Mirrors syncPlaidItem in plaid-sync.ts.
+ * Pulls current accounts and transactions for a single Flinks login (e.g.
+ * Wealthsimple) and upserts them into Supabase, scoped to the owning user.
+ * Mirrors syncPlaidItem in plaid-sync.ts. By default only looks at the
+ * last 90 days; pass `historical: true` for Flinks' full 365-day window
+ * (used by the "Backfill full history" button).
  */
-export async function syncFlinksItem(params: {
-  userId: string;
-  flinksItemId: string;
-  loginId: string;
-}) {
+export async function syncFlinksItem(
+  params: {
+    userId: string;
+    flinksItemId: string;
+    loginId: string;
+  },
+  options?: { historical?: boolean },
+) {
   const { userId, flinksItemId, loginId } = params;
   const admin = createAdminClient();
 
   const { RequestId } = await authorizeLogin(loginId);
-  const detail = await getAccountsDetail(RequestId);
+  const detail = await getAccountsDetail(
+    RequestId,
+    options?.historical ? "Days365" : "Days90",
+  );
   const flinksAccounts: FlinksAccount[] = detail.Accounts ?? [];
 
   const accountRows = flinksAccounts.map((account) => ({

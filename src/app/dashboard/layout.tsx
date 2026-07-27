@@ -1,3 +1,4 @@
+import { DashboardShell } from "@/components/dashboard-shell";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { SignOutButton } from "@/components/sign-out-button";
 import { TransactionChat } from "@/components/transaction-chat";
@@ -29,13 +30,7 @@ export default async function DashboardLayout({
           </div>
         </aside>
 
-        <main className="min-w-0 max-w-3xl flex-1">{children}</main>
-
-        <aside className="min-w-96 flex-1">
-          <div className="sticky top-10">
-            <TransactionChat />
-          </div>
-        </aside>
+        <DashboardShell main={children} chat={<TransactionChat />} />
       </div>
     </div>
   );

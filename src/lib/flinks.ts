@@ -67,6 +67,7 @@ type AccountsDetailResponse = {
 // GetAccountsDetailAsync with the same RequestId until it resolves to 200.
 export async function getAccountsDetail(
   requestId: string,
+  daysOfTransactions: "Days90" | "Days365" = "Days90",
 ): Promise<AccountsDetailResponse> {
   let response = await fetch(`${FLINKS_API_BASE}/GetAccountsDetail`, {
     method: "POST",
@@ -74,7 +75,7 @@ export async function getAccountsDetail(
     body: JSON.stringify({
       RequestId: requestId,
       WithTransactions: true,
-      DaysOfTransactions: "Days90",
+      DaysOfTransactions: daysOfTransactions,
     }),
   });
 

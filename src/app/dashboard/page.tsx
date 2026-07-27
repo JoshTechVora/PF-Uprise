@@ -1,16 +1,13 @@
+import { BackfillButton } from "@/components/backfill-button";
+import { CategoryRulesManager } from "@/components/category-rules-manager";
+import { CollapsibleSection } from "@/components/collapsible-section";
 import { ConnectBankButton } from "@/components/connect-bank-button";
 import { ConnectWealthsimpleButton } from "@/components/connect-wealthsimple-button";
 import { SyncButton } from "@/components/sync-button";
+import { TransactionCategorySelect } from "@/components/transaction-category-select";
 import { TransactionRangeFilter } from "@/components/transaction-range-filter";
+import { formatCurrency } from "@/lib/format-currency";
 import { createClient } from "@/lib/supabase/server";
-
-function formatCurrency(amount: number | null, currencyCode: string | null) {
-  if (amount === null) return "—";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: currencyCode ?? "USD",
-  }).format(amount);
-}
 
 function balanceColorClass(accountType: string | null) {
   if (accountType === "credit" || accountType === "loan") {
@@ -45,6 +42,11 @@ export default async function DashboardPage({
     .gte("date", cutoffDate)
     .order("date", { ascending: false });
 
+  const { data: categoryRules } = await supabase
+    .from("category_rules")
+    .select("*")
+    .order("created_at", { ascending: true });
+
   const totalOwed = (accounts ?? [])
     .filter((account) => account.type === "credit" || account.type === "loan")
     .reduce((sum, account) => sum + (account.current_balance ?? 0), 0);
@@ -74,24 +76,23 @@ export default async function DashboardPage({
           </div>
         </section>
 
-        <section className="mt-8">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-medium text-zinc-900 dark:text-zinc-50">
-              Accounts
-            </h2>
-            <div className="flex items-center gap-3">
+        <CollapsibleSection
+          title="Accounts"
+          actions={
+            <>
               {(accounts ?? []).length > 0 && <SyncButton />}
+              {(accounts ?? []).length > 0 && <BackfillButton />}
               <ConnectBankButton />
               <ConnectWealthsimpleButton />
-            </div>
-          </div>
-
+            </>
+          }
+        >
           {(accounts ?? []).length === 0 ? (
-            <p className="mt-4 rounded-lg border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+            <p className="rounded-lg border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
               No accounts connected yet. Connect a bank account to get started.
             </p>
           ) : (
-            <ul className="mt-4 divide-y divide-zinc-200 rounded-lg border border-zinc-200 bg-white dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-950">
+            <ul className="divide-y divide-zinc-200 rounded-lg border border-zinc-200 bg-white dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-950">
               {(accounts ?? []).map((account) => (
                 <li
                   key={account.id}
@@ -118,22 +119,22 @@ export default async function DashboardPage({
               ))}
             </ul>
           )}
-        </section>
+        </CollapsibleSection>
 
-        <section className="mt-8">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-medium text-zinc-900 dark:text-zinc-50">
-              Recent transactions
-            </h2>
-            <TransactionRangeFilter selected={range} />
-          </div>
+        <CollapsibleSection title="Auto-categorization rules">
+          <CategoryRulesManager rules={categoryRules ?? []} />
+        </CollapsibleSection>
 
+        <CollapsibleSection
+          title="Recent transactions"
+          actions={<TransactionRangeFilter selected={range} />}
+        >
           {(transactions ?? []).length === 0 ? (
-            <p className="mt-4 rounded-lg border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+            <p className="rounded-lg border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
               No transactions in this range.
             </p>
           ) : (
-            <ul className="mt-4 divide-y divide-zinc-200 rounded-lg border border-zinc-200 bg-white dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-950">
+            <ul className="divide-y divide-zinc-200 rounded-lg border border-zinc-200 bg-white dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-950">
               {(transactions ?? []).map((transaction) => (
                 <li
                   key={transaction.id}
@@ -148,23 +149,42 @@ export default async function DashboardPage({
                       {transaction.pending ? " · Pending" : ""}
                     </p>
                   </div>
-                  <p
-                    className={`text-sm font-medium ${
-                      transaction.amount > 0
-                        ? "text-zinc-900 dark:text-zinc-50"
-                        : "text-emerald-600"
-                    }`}
-                  >
-                    {formatCurrency(
-                      -transaction.amount,
-                      transaction.iso_currency_code,
-                    )}
-                  </p>
+                  <div className="flex items-center gap-3">
+                    <span
+                      title="Saved in the database"
+                      className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400"
+                    >
+                      <svg viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
+                        <path
+                          fillRule="evenodd"
+                          d="M16.704 5.29a1 1 0 0 1 0 1.415l-7.005 7.005a1 1 0 0 1-1.414 0L4.296 9.723a1 1 0 1 1 1.414-1.414l3.283 3.283 6.297-6.298a1 1 0 0 1 1.414-.004Z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      Stored
+                    </span>
+                    <TransactionCategorySelect
+                      transactionId={transaction.id}
+                      category={transaction.transaction_type}
+                    />
+                    <p
+                      className={`text-sm font-medium ${
+                        transaction.amount > 0
+                          ? "text-zinc-900 dark:text-zinc-50"
+                          : "text-emerald-600"
+                      }`}
+                    >
+                      {formatCurrency(
+                        -transaction.amount,
+                        transaction.iso_currency_code,
+                      )}
+                    </p>
+                  </div>
                 </li>
               ))}
             </ul>
           )}
-        </section>
+        </CollapsibleSection>
     </>
   );
 }
