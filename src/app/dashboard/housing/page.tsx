@@ -1,13 +1,13 @@
 import { CategoryTransactions } from "@/components/category-transactions";
 
-export default function GroceriesPage() {
+export default function HousingPage() {
   return (
     <div>
       <h2 className="text-lg font-medium text-zinc-900 dark:text-zinc-50">
-        Groceries
+        Housing
       </h2>
       <div className="mt-4">
-        <CategoryTransactions category="Groceries" />
+        <CategoryTransactions category="Housing" />
       </div>
     </div>
   );

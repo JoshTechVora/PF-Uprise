@@ -1,6 +1,7 @@
 import { DashboardShell } from "@/components/dashboard-shell";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { SignOutButton } from "@/components/sign-out-button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { TransactionChat } from "@/components/transaction-chat";
 import { createClient } from "@/lib/supabase/server";
 
@@ -27,6 +28,9 @@ export default async function DashboardLayout({
           <SidebarNav />
           <div className="mt-6 px-3">
             <SignOutButton />
+          </div>
+          <div className="mt-4 px-3">
+            <ThemeToggle />
           </div>
         </aside>
 

@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { isTransactionCategory } from "@/lib/transaction-categories";
+import {
+  isTransactionCategory,
+  isTransactionSubcategory,
+} from "@/lib/transaction-categories";
 import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
@@ -12,7 +15,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { transactionId, category } = await request.json();
+  const { transactionId, category, subcategory } = await request.json();
 
   if (!transactionId) {
     return NextResponse.json({ error: "Missing transactionId" }, { status: 400 });
@@ -22,15 +25,38 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid category" }, { status: 400 });
   }
 
+  if (
+    subcategory != null &&
+    (category === null || !isTransactionSubcategory(category, subcategory))
+  ) {
+    return NextResponse.json({ error: "Invalid subcategory" }, { status: 400 });
+  }
+
   // RLS scopes this update to rows where user_id = auth.uid(), so a caller
   // can only ever touch their own transactions.
   const { error } = await supabase
     .from("transactions")
-    .update({ transaction_type: category })
+    .update({ transaction_type: category, subcategory: subcategory ?? null })
     .eq("id", transactionId);
 
   if (error) {
-    return NextResponse.json({ error: "Failed to update category" }, { status: 500 });
+    const details = {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    };
+    console.error(
+      `[update-category] Failed to set transaction ${transactionId} to "${category}${subcategory ? ` › ${subcategory}` : ""}"`,
+      details,
+    );
+    return NextResponse.json(
+      {
+        error: "Failed to update category",
+        ...(process.env.NODE_ENV !== "production" && { details }),
+      },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json({ success: true });

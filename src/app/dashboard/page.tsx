@@ -3,6 +3,7 @@ import { CategoryRulesManager } from "@/components/category-rules-manager";
 import { CollapsibleSection } from "@/components/collapsible-section";
 import { ConnectBankButton } from "@/components/connect-bank-button";
 import { ConnectWealthsimpleButton } from "@/components/connect-wealthsimple-button";
+import { DeleteTransactionButton } from "@/components/delete-transaction-button";
 import { SyncButton } from "@/components/sync-button";
 import { TransactionCategorySelect } from "@/components/transaction-category-select";
 import { TransactionRangeFilter } from "@/components/transaction-range-filter";
@@ -39,6 +40,7 @@ export default async function DashboardPage({
   const { data: transactions } = await supabase
     .from("transactions")
     .select("*, accounts(name)")
+    .is("deleted_at", null)
     .gte("date", cutoffDate)
     .order("date", { ascending: false });
 
@@ -166,6 +168,7 @@ export default async function DashboardPage({
                     <TransactionCategorySelect
                       transactionId={transaction.id}
                       category={transaction.transaction_type}
+                      subcategory={transaction.subcategory}
                     />
                     <p
                       className={`text-sm font-medium ${
@@ -179,6 +182,10 @@ export default async function DashboardPage({
                         transaction.iso_currency_code,
                       )}
                     </p>
+                    <DeleteTransactionButton
+                      transactionId={transaction.id}
+                      description={`${transaction.merchant_name ?? transaction.name} · ${formatCurrency(-transaction.amount, transaction.iso_currency_code)} on ${transaction.date}`}
+                    />
                   </div>
                 </li>
               ))}

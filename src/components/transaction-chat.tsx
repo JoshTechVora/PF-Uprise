@@ -19,9 +19,9 @@ type TransactionForChat = {
 const PAGE_LABELS: Record<string, string> = {
   "/dashboard": "Home",
   "/dashboard/taxes": "Taxes",
-  "/dashboard/mortgage": "Mortgage",
+  "/dashboard/housing": "Housing",
   "/dashboard/energy": "Energy",
-  "/dashboard/groceries": "Groceries & Food",
+  "/dashboard/food": "Food",
 };
 
 export function TransactionChat() {
@@ -48,6 +48,7 @@ export function TransactionChat() {
     const { data: transactions } = await supabase
       .from("transactions")
       .select("date, merchant_name, name, amount, iso_currency_code, pending, category")
+      .is("deleted_at", null)
       .order("date", { ascending: false })
       .limit(100);
 

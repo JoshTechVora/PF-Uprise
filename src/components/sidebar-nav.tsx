@@ -11,12 +11,12 @@ const NAV_SECTIONS = [
   {
     title: "Expenses",
     items: [
-      { href: "/dashboard/mortgage", label: "Mortgage" },
+      { href: "/dashboard/housing", label: "Housing" },
       { href: "/dashboard/energy", label: "Energy" },
-      { href: "/dashboard/groceries", label: "Groceries" },
       { href: "/dashboard/food", label: "Food" },
-      { href: "/dashboard/car", label: "Car" },
-      { href: "/dashboard/fitness", label: "Fitness" },
+      { href: "/dashboard/vehicles", label: "Vehicles" },
+      { href: "/dashboard/health-wellness", label: "Health & Wellness" },
+      { href: "/dashboard/fun-leisure", label: "Fun & Leisure" },
     ],
   },
   {

@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { isTransactionCategory } from "@/lib/transaction-categories";
+import {
+  isTransactionCategory,
+  isTransactionSubcategory,
+} from "@/lib/transaction-categories";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET() {
@@ -34,7 +37,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { matchText, category } = await request.json();
+  const { matchText, category, subcategory } = await request.json();
 
   if (!matchText || typeof matchText !== "string" || !matchText.trim()) {
     return NextResponse.json({ error: "Missing matchText" }, { status: 400 });
@@ -44,9 +47,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid category" }, { status: 400 });
   }
 
+  if (subcategory != null && !isTransactionSubcategory(category, subcategory)) {
+    return NextResponse.json({ error: "Invalid subcategory" }, { status: 400 });
+  }
+
   const { data, error } = await supabase
     .from("category_rules")
-    .insert({ user_id: user.id, match_text: matchText.trim(), category })
+    .insert({
+      user_id: user.id,
+      match_text: matchText.trim(),
+      category,
+      subcategory: subcategory ?? null,
+    })
     .select("*")
     .single();
 

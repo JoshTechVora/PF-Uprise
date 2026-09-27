@@ -56,22 +56,18 @@ create table if not exists transactions (
 -- existed) to add the user-classified category column.
 alter table transactions add column if not exists transaction_type text;
 
+-- Soft delete: set when the user deletes a transaction. Bank syncs upsert by
+-- transaction_id and never write this column, so deleted transactions stay
+-- hidden instead of reappearing on the next sync. Queries filter on
+-- `deleted_at is null`.
+alter table transactions add column if not exists deleted_at timestamptz;
+
 -- "Groceries & Food" was split into two separate categories.
 update transactions set transaction_type = 'Groceries' where transaction_type = 'Groceries & Food';
 
--- transaction_type is a user-assigned classification, distinct from
--- `category` (Plaid/Flinks' auto-assigned category). Keep this list in sync
--- with TRANSACTION_CATEGORIES in src/lib/transaction-categories.ts.
-alter table transactions drop constraint if exists transactions_transaction_type_chk;
-alter table transactions add constraint transactions_transaction_type_chk check (
-  transaction_type is null or transaction_type in (
-    'Energy', 'Mortgage', 'Groceries', 'Food', 'Coffee', 'Pharmacy', 'Vehicles', 'Fitness'
-  )
-);
-
 -- Auto-categorization rules: if a transaction's name/merchant_name contains
--- match_text (case-insensitive), it gets assigned `category` when the rule
--- engine runs.
+-- match_text (case-insensitive), it gets assigned `category` (and
+-- `subcategory`, if set) when the rule engine runs.
 create table if not exists category_rules (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
@@ -80,9 +76,84 @@ create table if not exists category_rules (
   created_at timestamptz not null default now()
 );
 
+alter table transactions add column if not exists subcategory text;
+alter table category_rules add column if not exists subcategory text;
+
+-- Drop the old checks so the renames below can run.
+alter table transactions drop constraint if exists transactions_transaction_type_chk;
+alter table transactions drop constraint if exists transactions_subcategory_chk;
 alter table category_rules drop constraint if exists category_rules_category_chk;
+alter table category_rules drop constraint if exists category_rules_subcategory_chk;
+
+update transactions set transaction_type = 'Health & Wellness', subcategory = 'Fitness' where transaction_type = 'Fitness';
+update transactions set transaction_type = 'Housing', subcategory = 'Mortgage' where transaction_type = 'Mortgage';
+update category_rules set category = 'Health & Wellness', subcategory = 'Fitness' where category = 'Fitness';
+update category_rules set category = 'Housing', subcategory = 'Mortgage' where category = 'Mortgage';
+
+-- "EV Charging" and "Gas" were folded into "Fuel" under Vehicles.
+update transactions set subcategory = 'Fuel' where transaction_type = 'Vehicles' and subcategory in ('EV Charging', 'Gas');
+update category_rules set subcategory = 'Fuel' where category = 'Vehicles' and subcategory in ('EV Charging', 'Gas');
+
+-- "Takeout & Delivery" was folded into "Restaurants" under Food.
+update transactions set subcategory = 'Restaurants' where transaction_type = 'Food' and subcategory = 'Takeout & Delivery';
+update category_rules set subcategory = 'Restaurants' where category = 'Food' and subcategory = 'Takeout & Delivery';
+
+-- Groceries, Coffee and Pharmacy used to be top-level categories; move them
+-- under their parent as subcategories.
+update transactions set subcategory = transaction_type, transaction_type = 'Food'
+  where transaction_type in ('Groceries', 'Coffee');
+update transactions set subcategory = transaction_type, transaction_type = 'Health & Wellness'
+  where transaction_type = 'Pharmacy';
+update category_rules set subcategory = category, category = 'Food'
+  where category in ('Groceries', 'Coffee');
+update category_rules set subcategory = category, category = 'Health & Wellness'
+  where category = 'Pharmacy';
+
+-- Subcategories briefly lived in a transaction_subcategories table; copy any
+-- values stored there into the text columns and remove it.
+do $$
+begin
+  if to_regclass('public.transaction_subcategories') is not null then
+    update transactions t set subcategory = s.name
+      from transaction_subcategories s where t.subcategory_id = s.id;
+    update category_rules r set subcategory = s.name
+      from transaction_subcategories s where r.subcategory_id = s.id;
+  end if;
+end $$;
+alter table transactions drop column if exists subcategory_id;
+alter table category_rules drop column if exists subcategory_id;
+drop table if exists transaction_subcategories;
+
+-- transaction_type is a user-assigned classification, distinct from
+-- `category` (Plaid/Flinks' auto-assigned category). Keep these lists in sync
+-- with TRANSACTION_CATEGORIES in src/lib/transaction-categories.ts.
+alter table transactions add constraint transactions_transaction_type_chk check (
+  transaction_type is null or transaction_type in (
+    'Energy', 'Housing', 'Food', 'Vehicles', 'Health & Wellness', 'Fun & Leisure'
+  )
+);
+alter table transactions add constraint transactions_subcategory_chk check (
+  subcategory is null or (transaction_type, subcategory) in (
+    ('Energy', 'Electricity'), ('Energy', 'Natural Gas'), ('Energy', 'Heating Oil'), ('Energy', 'Propane'),
+    ('Housing', 'Mortgage'), ('Housing', 'Rent'), ('Housing', 'Property Tax'), ('Housing', 'Home Insurance'), ('Housing', 'Condo Fees'), ('Housing', 'Maintenance & Repairs'), ('Housing', 'Water & Sewer'), ('Housing', 'Internet'), ('Housing', 'Phone'), ('Housing', 'Furniture & Household'),
+    ('Food', 'Groceries'), ('Food', 'Coffee'), ('Food', 'Restaurants'), ('Food', 'Alcohol'), ('Food', 'Snacks'),
+    ('Vehicles', 'Fuel'), ('Vehicles', 'Car Payment'), ('Vehicles', 'Insurance'), ('Vehicles', 'Maintenance & Repairs'), ('Vehicles', 'Parking'), ('Vehicles', 'Tolls'), ('Vehicles', 'Registration & Licensing'),
+    ('Health & Wellness', 'Pharmacy'), ('Health & Wellness', 'Fitness'), ('Health & Wellness', 'Doctor'), ('Health & Wellness', 'Dental'), ('Health & Wellness', 'Vision'), ('Health & Wellness', 'Therapy'), ('Health & Wellness', 'Health Insurance'), ('Health & Wellness', 'Personal Care'),
+    ('Fun & Leisure', 'Entertainment'), ('Fun & Leisure', 'Streaming'), ('Fun & Leisure', 'Events & Concerts'), ('Fun & Leisure', 'Hobbies'), ('Fun & Leisure', 'Sports & Recreation'), ('Fun & Leisure', 'Travel'), ('Fun & Leisure', 'Books & Games')
+  )
+);
 alter table category_rules add constraint category_rules_category_chk check (
-  category in ('Energy', 'Mortgage', 'Groceries', 'Food', 'Coffee', 'Pharmacy', 'Vehicles', 'Fitness')
+  category in ('Energy', 'Housing', 'Food', 'Vehicles', 'Health & Wellness', 'Fun & Leisure')
+);
+alter table category_rules add constraint category_rules_subcategory_chk check (
+  subcategory is null or (category, subcategory) in (
+    ('Energy', 'Electricity'), ('Energy', 'Natural Gas'), ('Energy', 'Heating Oil'), ('Energy', 'Propane'),
+    ('Housing', 'Mortgage'), ('Housing', 'Rent'), ('Housing', 'Property Tax'), ('Housing', 'Home Insurance'), ('Housing', 'Condo Fees'), ('Housing', 'Maintenance & Repairs'), ('Housing', 'Water & Sewer'), ('Housing', 'Internet'), ('Housing', 'Phone'), ('Housing', 'Furniture & Household'),
+    ('Food', 'Groceries'), ('Food', 'Coffee'), ('Food', 'Restaurants'), ('Food', 'Alcohol'), ('Food', 'Snacks'),
+    ('Vehicles', 'Fuel'), ('Vehicles', 'Car Payment'), ('Vehicles', 'Insurance'), ('Vehicles', 'Maintenance & Repairs'), ('Vehicles', 'Parking'), ('Vehicles', 'Tolls'), ('Vehicles', 'Registration & Licensing'),
+    ('Health & Wellness', 'Pharmacy'), ('Health & Wellness', 'Fitness'), ('Health & Wellness', 'Doctor'), ('Health & Wellness', 'Dental'), ('Health & Wellness', 'Vision'), ('Health & Wellness', 'Therapy'), ('Health & Wellness', 'Health Insurance'), ('Health & Wellness', 'Personal Care'),
+    ('Fun & Leisure', 'Entertainment'), ('Fun & Leisure', 'Streaming'), ('Fun & Leisure', 'Events & Concerts'), ('Fun & Leisure', 'Hobbies'), ('Fun & Leisure', 'Sports & Recreation'), ('Fun & Leisure', 'Travel'), ('Fun & Leisure', 'Books & Games')
+  )
 );
 
 create unique index if not exists category_rules_user_match_idx

@@ -2,29 +2,43 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { TRANSACTION_CATEGORIES } from "@/lib/transaction-categories";
+import { CategoryCombobox } from "@/components/category-combobox";
+import {
+  decodeCategoryValue,
+  encodeCategoryValue,
+} from "@/lib/transaction-categories";
 
 export function TransactionCategorySelect({
   transactionId,
   category,
+  subcategory,
 }: {
   transactionId: string;
   category: string | null;
+  subcategory: string | null;
 }) {
   const router = useRouter();
-  const [value, setValue] = useState(category ?? "");
+  const [value, setValue] = useState(encodeCategoryValue(category, subcategory));
   const [saving, setSaving] = useState(false);
 
-  async function handleChange(event: React.ChangeEvent<HTMLSelectElement>) {
-    const next = event.target.value;
+  async function handleChange(next: string) {
+    const previous = value;
     setValue(next);
     setSaving(true);
     try {
-      await fetch("/api/transactions/update-category", {
+      const res = await fetch("/api/transactions/update-category", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transactionId, category: next || null }),
+        body: JSON.stringify({ transactionId, ...decodeCategoryValue(next) }),
       });
+      if (!res.ok) {
+        // Don't leave the dropdown showing a choice that wasn't saved.
+        setValue(previous);
+        const data = await res.json().catch(() => null);
+        console.error("Failed to update category", data);
+        alert(data?.error ?? "Failed to update category");
+        return;
+      }
       router.refresh();
     } finally {
       setSaving(false);
@@ -32,18 +46,12 @@ export function TransactionCategorySelect({
   }
 
   return (
-    <select
+    <CategoryCombobox
       value={value}
       onChange={handleChange}
+      allowUncategorized
       disabled={saving}
-      className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-700 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
-    >
-      <option value="">Uncategorized</option>
-      {TRANSACTION_CATEGORIES.map((option) => (
-        <option key={option} value={option}>
-          {option}
-        </option>
-      ))}
-    </select>
+      className="w-48 px-2 py-1 text-xs"
+    />
   );
 }
