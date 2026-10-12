@@ -9,7 +9,7 @@ export function DashboardShell({
   main: ReactNode;
   chat: ReactNode;
 }) {
-  const [chatOpen, setChatOpen] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
 
   return (
     <>

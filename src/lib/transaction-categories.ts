@@ -5,6 +5,7 @@ export const TRANSACTION_CATEGORIES = [
   "Vehicles",
   "Health & Wellness",
   "Fun & Leisure",
+  "Shopping",
 ] as const;
 
 export type TransactionCategory = (typeof TRANSACTION_CATEGORIES)[number];
@@ -63,6 +64,12 @@ export const TRANSACTION_SUBCATEGORIES: Record<TransactionCategory, readonly str
     "Sports & Recreation",
     "Travel",
     "Books & Games",
+  ],
+  Shopping: [
+    "Clothing",
+    "Electronics",
+    "Gifts",
+    "General Merchandise",
   ],
 };
 

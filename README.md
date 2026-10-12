@@ -32,6 +32,18 @@ A personal finance tracker built with Next.js, Supabase, and Plaid.
      `PLAID_ENV` is `sandbox`, `development`, or `production`.
    - `ANTHROPIC_API_KEY` — console.anthropic.com API key, used by `/api/chat`
      to power the transaction chat assistant.
+   - `GEMINI_API_KEY` — [aistudio.google.com/apikey](https://aistudio.google.com/apikey),
+     used to embed energy bills for search (`gemini-embedding-2`, 1536
+     dimensions to match `document_chunks.embedding`).
+   - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — optional, for syncing energy
+     bills from a Google Drive folder. In [Google Cloud Console](https://console.cloud.google.com):
+     enable the **Google Drive API**, configure the OAuth consent screen
+     (External, add yourself as a test user, add the
+     `https://www.googleapis.com/auth/drive.readonly` scope), then create an
+     **OAuth client ID** of type *Web application* with an authorized redirect
+     URI of `http://localhost:3000/api/google-drive/callback` (plus your
+     production URL's equivalent). Set `GOOGLE_REDIRECT_URI` only if the
+     callback URL differs from `<current site>/api/google-drive/callback`.
 
 4. Install dependencies and run the dev server:
 

@@ -17,6 +17,7 @@ const NAV_SECTIONS = [
       { href: "/dashboard/vehicles", label: "Vehicles" },
       { href: "/dashboard/health-wellness", label: "Health & Wellness" },
       { href: "/dashboard/fun-leisure", label: "Fun & Leisure" },
+      { href: "/dashboard/shopping", label: "Shopping" },
     ],
   },
   {

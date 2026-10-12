@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
   const { data: bill, error: fetchError } = await admin
     .from("energy_bills")
-    .select("id, file_path")
+    .select("id, file_path, drive_file_id")
     .eq("id", billId)
     .eq("user_id", user.id)
     .single();
@@ -46,6 +46,24 @@ export async function POST(request: Request) {
 
   if (deleteError) {
     return NextResponse.json({ error: "Failed to delete bill" }, { status: 500 });
+  }
+
+  // The file is still in the Google Drive folder; without this the next sync
+  // would import it again.
+  if (bill.drive_file_id) {
+    const { data: connection } = await admin
+      .from("google_drive_connections")
+      .select("ignored_file_ids")
+      .eq("user_id", user.id)
+      .single();
+    if (connection) {
+      const ignored = new Set<string>(connection.ignored_file_ids ?? []);
+      ignored.add(bill.drive_file_id);
+      await admin
+        .from("google_drive_connections")
+        .update({ ignored_file_ids: [...ignored] })
+        .eq("user_id", user.id);
+    }
   }
 
   return NextResponse.json({ success: true });

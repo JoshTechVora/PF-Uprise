@@ -129,7 +129,7 @@ drop table if exists transaction_subcategories;
 -- with TRANSACTION_CATEGORIES in src/lib/transaction-categories.ts.
 alter table transactions add constraint transactions_transaction_type_chk check (
   transaction_type is null or transaction_type in (
-    'Energy', 'Housing', 'Food', 'Vehicles', 'Health & Wellness', 'Fun & Leisure'
+    'Energy', 'Housing', 'Food', 'Vehicles', 'Health & Wellness', 'Fun & Leisure', 'Shopping'
   )
 );
 alter table transactions add constraint transactions_subcategory_chk check (
@@ -139,11 +139,12 @@ alter table transactions add constraint transactions_subcategory_chk check (
     ('Food', 'Groceries'), ('Food', 'Coffee'), ('Food', 'Restaurants'), ('Food', 'Alcohol'), ('Food', 'Snacks'),
     ('Vehicles', 'Fuel'), ('Vehicles', 'Car Payment'), ('Vehicles', 'Insurance'), ('Vehicles', 'Maintenance & Repairs'), ('Vehicles', 'Parking'), ('Vehicles', 'Tolls'), ('Vehicles', 'Registration & Licensing'),
     ('Health & Wellness', 'Pharmacy'), ('Health & Wellness', 'Fitness'), ('Health & Wellness', 'Doctor'), ('Health & Wellness', 'Dental'), ('Health & Wellness', 'Vision'), ('Health & Wellness', 'Therapy'), ('Health & Wellness', 'Health Insurance'), ('Health & Wellness', 'Personal Care'),
-    ('Fun & Leisure', 'Entertainment'), ('Fun & Leisure', 'Streaming'), ('Fun & Leisure', 'Events & Concerts'), ('Fun & Leisure', 'Hobbies'), ('Fun & Leisure', 'Sports & Recreation'), ('Fun & Leisure', 'Travel'), ('Fun & Leisure', 'Books & Games')
+    ('Fun & Leisure', 'Entertainment'), ('Fun & Leisure', 'Streaming'), ('Fun & Leisure', 'Events & Concerts'), ('Fun & Leisure', 'Hobbies'), ('Fun & Leisure', 'Sports & Recreation'), ('Fun & Leisure', 'Travel'), ('Fun & Leisure', 'Books & Games'),
+    ('Shopping', 'Clothing'), ('Shopping', 'Electronics'), ('Shopping', 'Gifts'), ('Shopping', 'General Merchandise')
   )
 );
 alter table category_rules add constraint category_rules_category_chk check (
-  category in ('Energy', 'Housing', 'Food', 'Vehicles', 'Health & Wellness', 'Fun & Leisure')
+  category in ('Energy', 'Housing', 'Food', 'Vehicles', 'Health & Wellness', 'Fun & Leisure', 'Shopping')
 );
 alter table category_rules add constraint category_rules_subcategory_chk check (
   subcategory is null or (category, subcategory) in (
@@ -152,7 +153,8 @@ alter table category_rules add constraint category_rules_subcategory_chk check (
     ('Food', 'Groceries'), ('Food', 'Coffee'), ('Food', 'Restaurants'), ('Food', 'Alcohol'), ('Food', 'Snacks'),
     ('Vehicles', 'Fuel'), ('Vehicles', 'Car Payment'), ('Vehicles', 'Insurance'), ('Vehicles', 'Maintenance & Repairs'), ('Vehicles', 'Parking'), ('Vehicles', 'Tolls'), ('Vehicles', 'Registration & Licensing'),
     ('Health & Wellness', 'Pharmacy'), ('Health & Wellness', 'Fitness'), ('Health & Wellness', 'Doctor'), ('Health & Wellness', 'Dental'), ('Health & Wellness', 'Vision'), ('Health & Wellness', 'Therapy'), ('Health & Wellness', 'Health Insurance'), ('Health & Wellness', 'Personal Care'),
-    ('Fun & Leisure', 'Entertainment'), ('Fun & Leisure', 'Streaming'), ('Fun & Leisure', 'Events & Concerts'), ('Fun & Leisure', 'Hobbies'), ('Fun & Leisure', 'Sports & Recreation'), ('Fun & Leisure', 'Travel'), ('Fun & Leisure', 'Books & Games')
+    ('Fun & Leisure', 'Entertainment'), ('Fun & Leisure', 'Streaming'), ('Fun & Leisure', 'Events & Concerts'), ('Fun & Leisure', 'Hobbies'), ('Fun & Leisure', 'Sports & Recreation'), ('Fun & Leisure', 'Travel'), ('Fun & Leisure', 'Books & Games'),
+    ('Shopping', 'Clothing'), ('Shopping', 'Electronics'), ('Shopping', 'Gifts'), ('Shopping', 'General Merchandise')
   )
 );
 
@@ -228,6 +230,90 @@ alter table energy_bills add constraint energy_bills_status_chk check (
 );
 
 create index if not exists energy_bills_user_id_idx on energy_bills (user_id);
+
+-- Where a bill came from. Google Drive-synced bills keep the Drive file id
+-- so a sync never imports the same file twice.
+alter table energy_bills add column if not exists source text not null default 'upload';
+alter table energy_bills add column if not exists drive_file_id text;
+
+-- Remove the short-lived OneDrive integration, if it was ever applied.
+drop index if exists energy_bills_onedrive_item_idx;
+alter table energy_bills drop column if exists onedrive_item_id;
+drop table if exists onedrive_connections;
+
+alter table energy_bills drop constraint if exists energy_bills_source_chk;
+update energy_bills set source = 'upload' where source not in ('upload', 'google_drive');
+alter table energy_bills add constraint energy_bills_source_chk check (
+  source in ('upload', 'google_drive')
+);
+create unique index if not exists energy_bills_drive_file_idx
+  on energy_bills (user_id, drive_file_id)
+  where drive_file_id is not null;
+
+-- One Google Drive connection per user, plus the folder bills are synced
+-- from. ignored_file_ids holds files the user removed from the app so sync
+-- doesn't re-import them.
+create table if not exists google_drive_connections (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  account_email text,
+  access_token text not null,
+  refresh_token text not null,
+  expires_at timestamptz not null,
+  ignored_file_ids text[] not null default '{}',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- No policies: this table holds Google OAuth tokens, so (like plaid_items)
+-- it's only ever accessed server-side with the secret key.
+alter table google_drive_connections enable row level security;
+
+-- The Google Drive folder synced for each top-level category (at most one
+-- per user per category). Keep the category list in sync with
+-- TRANSACTION_CATEGORIES in src/lib/transaction-categories.ts.
+create table if not exists drive_folders (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  category text not null,
+  folder_id text not null,
+  folder_name text not null,
+  last_synced_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, category)
+);
+
+alter table drive_folders drop constraint if exists drive_folders_category_chk;
+alter table drive_folders add constraint drive_folders_category_chk check (
+  category in ('Energy', 'Housing', 'Food', 'Vehicles', 'Health & Wellness', 'Fun & Leisure', 'Shopping')
+);
+
+alter table drive_folders enable row level security;
+
+drop policy if exists "Users manage their own drive folders" on drive_folders;
+create policy "Users manage their own drive folders"
+  on drive_folders for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- The folder used to live on google_drive_connections (Energy was the only
+-- one); move it into drive_folders and drop the old columns.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'google_drive_connections' and column_name = 'folder_id'
+  ) then
+    insert into drive_folders (user_id, category, folder_id, folder_name, last_synced_at)
+      select user_id, 'Energy', folder_id, coalesce(folder_name, 'Energy'), last_synced_at
+      from google_drive_connections
+      where folder_id is not null
+    on conflict (user_id, category) do nothing;
+  end if;
+end $$;
+alter table google_drive_connections drop column if exists folder_id;
+alter table google_drive_connections drop column if exists folder_name;
+alter table google_drive_connections drop column if exists last_synced_at;
 
 alter table energy_bills enable row level security;
 

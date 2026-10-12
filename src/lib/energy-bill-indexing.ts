@@ -5,7 +5,7 @@ import { chunkText } from "@/lib/text-chunker";
 
 /**
  * Extracts text from an uploaded energy bill, chunks it, embeds each chunk
- * via the configured Foundry model, and stores the chunks + embeddings in
+ * with the Gemini embeddings model, and stores the chunks + embeddings in
  * document_chunks for later retrieval. Updates the energy_bills row's
  * status to reflect the outcome.
  */
@@ -14,8 +14,10 @@ export async function indexEnergyBill(params: {
   energyBillId: string;
   fileBuffer: Buffer;
   contentType: string | null;
+  // Passed to the embedding model as the document title.
+  fileName?: string;
 }) {
-  const { userId, energyBillId, fileBuffer, contentType } = params;
+  const { userId, energyBillId, fileBuffer, contentType, fileName } = params;
   const admin = createAdminClient();
 
   try {
@@ -46,7 +48,7 @@ export async function indexEnergyBill(params: {
       return;
     }
 
-    const embeddings = await generateEmbeddings(chunks);
+    const embeddings = await generateEmbeddings(chunks, { kind: "document", title: fileName });
 
     const chunkRows = chunks.map((content, index) => ({
       user_id: userId,
